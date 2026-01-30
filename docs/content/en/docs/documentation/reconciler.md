@@ -172,42 +172,44 @@ require the latest status version possible, for example, if the status subresour
 See [Representing Allocated Values](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#representing-allocated-values)
 from the Kubernetes docs for more details.
 
-The framework provides the  
-[`PrimaryUpdateAndCacheUtils`](https://github.com/operator-framework/java-operator-sdk/blob/main/operator-framework-core/src/main/java/io/javaoperatorsdk/operator/api/reconciler/PrimaryUpdateAndCacheUtils.java) utility class
+The framework provides the
+[`ResourceOperations`](https://github.com/operator-framework/java-operator-sdk/blob/main/operator-framework-core/src/main/java/io/javaoperatorsdk/operator/api/reconciler/ResourceOperations.java) class
 to help with these use cases.
 
-This class' methods use internal caches in combination with update methods that leveraging 
-optimistic locking. If the update method fails on optimistic locking, it will retry 
-using a fresh resource from the server as base for modification. 
+This class provides methods that use internal caches in combination with update methods leveraging
+optimistic locking. If the update method fails on optimistic locking, it will retry
+using a fresh resource from the server as base for modification.
 
 ```java
 @Override
 public UpdateControl<StatusPatchCacheCustomResource> reconcile(
         StatusPatchCacheCustomResource resource, Context<StatusPatchCacheCustomResource> context) {
-    
+
     // omitted logic
-    
+
+    var resourceOps = new ResourceOperations<>(context);
+
     // update with SSA requires a fresh copy
     var freshCopy = createFreshCopy(primary);
     freshCopy.getStatus().setValue(statusWithState());
-    
-    var updatedResource = PrimaryUpdateAndCacheUtils.ssaPatchStatusAndCacheResource(resource, freshCopy, context);
 
-    // the resource was updated transparently via the utils, no further action is required via UpdateControl in this case
+    var updatedResource = resourceOps.serverSideApplyPrimaryStatus(freshCopy);
+
+    // the resource was updated transparently via ResourceOperations, no further action is required via UpdateControl in this case
     return UpdateControl.noUpdate();
   }
 ```
 
-After the update `PrimaryUpdateAndCacheUtils.ssaPatchStatusAndCacheResource` puts the result of the update into an internal
+After the update, `resourceOps.serverSideApplyPrimaryStatus` puts the result of the update into an internal
 cache and the framework will make sure that the next reconciliation contains the most recent version of the resource.
 Note that it is not necessarily the same version returned as response from the update, it can be a newer version since other parties
 can do additional updates meanwhile. However, unless it has been explicitly modified, that
 resource will contain the up-to-date status.
 
-Note that you can also perform additional updates after the `PrimaryUpdateAndCacheUtils.*PatchStatusAndCacheResource` is
-called, either by calling any of the `PrimeUpdateAndCacheUtils` methods again or via `UpdateControl`. Using
-`PrimaryUpdateAndCacheUtils` guarantees that the next reconciliation will see a resource state no older than the version
-updated via `PrimaryUpdateAndCacheUtils`.
+Note that you can also perform additional updates after any `ResourceOperations` method is
+called, either by calling any of the `ResourceOperations` methods again or via `UpdateControl`. Using
+`ResourceOperations` guarantees that the next reconciliation will see a resource state no older than the version
+updated via `ResourceOperations`.
 
 See related integration test [here](https://github.com/operator-framework/java-operator-sdk/blob/main/operator-framework/src/test/java/io/javaoperatorsdk/operator/baseapi/statuscache).
 
@@ -253,8 +255,8 @@ In this mode:
   resource
   and reconciliation is not re-scheduled.
 - you cannot use the `Cleaner` interface. The framework assumes you will explicitly manage the finalizers. To
-  add finalizer you can use [
-  `PrimeUpdateAndCacheUtils`](https://github.com/operator-framework/java-operator-sdk/blob/main/operator-framework-core/src/main/java/io/javaoperatorsdk/operator/api/reconciler/PrimaryUpdateAndCacheUtils.java#L308).
+  add finalizer you can use
+  [`ResourceOperations`](https://github.com/operator-framework/java-operator-sdk/blob/main/operator-framework-core/src/main/java/io/javaoperatorsdk/operator/api/reconciler/ResourceOperations.java).
 - you cannot use managed dependent resources since those manage the finalizers and other logic related to the normal
   execution mode.
 

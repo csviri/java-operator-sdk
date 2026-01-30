@@ -5,6 +5,11 @@ author: >-
   [Attila Mészáros](https://github.com/csviri) and [Chris Laprun](https://github.com/metacosm)
 ---
 
+> **Note (v5.3+):** The `PrimaryUpdateAndCacheUtils` class described in this blog post has been replaced by the
+> [`ResourceOperations`](https://github.com/operator-framework/java-operator-sdk/blob/main/operator-framework-core/src/main/java/io/javaoperatorsdk/operator/api/reconciler/ResourceOperations.java) API.
+> For migration instructions, see the [v5.3 migration guide](/docs/migration/v5-3-migration/).
+> The concepts and mechanisms described below remain the same.
+
 We recently released v5.1 of Java Operator SDK (JOSDK). One of the highlights of this release is related to a topic of
 so-called
 [allocated values](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#representing-allocated-values
