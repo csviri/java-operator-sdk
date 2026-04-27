@@ -55,6 +55,7 @@
     <module>bootstrapper-maven-plugin</module>
     <module>test-index-processor</module>
     <module>migration</module>
+    <module>performance-tests</module>
   </modules>
 
   <scm>
@@ -103,6 +104,7 @@
     <git-commit-id-maven-plugin.version>10.0.0</git-commit-id-maven-plugin.version>
     <jib-maven-plugin.version>3.5.1</jib-maven-plugin.version>
     <spotless.version>3.4.0</spotless.version>
+    <jmh.version>1.37</jmh.version>
   </properties>
 
   <dependencyManagement>
@@ -207,6 +209,12 @@
         <groupId>io.javaoperatorsdk</groupId>
         <artifactId>operator-framework-core</artifactId>
         <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.javaoperatorsdk</groupId>
+        <artifactId>operator-framework-core</artifactId>
+        <version>${project.version}</version>
+        <type>test-jar</type>
       </dependency>
       <dependency>
         <groupId>io.javaoperatorsdk</groupId>
@@ -620,6 +628,12 @@
           </plugin>
         </plugins>
       </build>
+    </profile>
+    <profile>
+      <id>performance-tests</id>
+      <properties>
+        <skipPerformanceTests>false</skipPerformanceTests>
+      </properties>
     </profile>
   </profiles>
 </project>
