@@ -116,6 +116,33 @@ class DesiredStateAspectAuditTest {
   }
 
   /**
+   * An aspect that looks up the actual resource of a different dependent asks for the desired state
+   * of that one while the desired state of the first is still being computed. Dependents that land
+   * in the same bin of the map holding the desired states used to fail with "Recursive update".
+   */
+  @Test
+  void aspectCanLookUpActualResourceOfAnotherDependent() {
+    final var other = new ChildConfigMapDependent();
+    final var dependent = new ChildConfigMapDependent();
+    final DesiredStateAspect aspect =
+        (desired, dependentResource, ctx) -> {
+          if (dependentResource == dependent) {
+            ((DependentResource) other).getSecondaryResource(ctx.getPrimaryResource(), ctx);
+          }
+        };
+    final var controller = controllerWith(List.of(aspect));
+    final EventSourceManager<ConfigMap> esm = mock();
+    final EventSource<ConfigMap, ConfigMap> es = mock();
+    when(es.getSecondaryResources(any())).thenReturn(Set.of(configMap("child", "actual")));
+    when(esm.getEventSourcesFor(ConfigMap.class)).thenReturn(List.of(es));
+    when(controller.getEventSourceManager()).thenReturn(esm);
+    final var context = new DefaultContext<>(null, controller, PRIMARY, false, false);
+
+    assertThatCode(() -> dependent.getSecondaryResource(PRIMARY, context))
+        .doesNotThrowAnyException();
+  }
+
+  /**
    * Before 110199c47, a DefaultContext built on a Controller whose getConfiguration() is not
    * stubbed (the pattern the existing tests used: new DefaultContext<>(mock(), mock(), ...)) could
    * compute desired states. Now applyDesiredStateAspects dereferences the null
@@ -143,6 +170,11 @@ class DesiredStateAspectAuditTest {
       extends KubernetesDependentResource<ConfigMap, ConfigMap> {
     ChildConfigMapDependent() {
       super(ConfigMap.class);
+    }
+
+    @Override
+    public int hashCode() {
+      return 1;
     }
 
     @Override

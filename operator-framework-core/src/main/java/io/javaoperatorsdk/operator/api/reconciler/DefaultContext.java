@@ -21,6 +21,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -52,6 +54,7 @@ public class DefaultContext<P extends HasMetadata> implements Context<P> {
   private final Map<DependentResource<?, P>, Object> desiredStates = new ConcurrentHashMap<>();
   private final Map<DependentResource<?, P>, DesiredStateInProgress> desiredStatesInProgress =
       new ConcurrentHashMap<>();
+  private final Map<DependentResource<?, P>, Lock> desiredStateLocks = new ConcurrentHashMap<>();
   private final ResourceOperations<P> resourceOperations;
 
   public DefaultContext(
@@ -278,20 +281,36 @@ public class DefaultContext<P extends HasMetadata> implements Context<P> {
     if (computing != null && computing.thread() == Thread.currentThread()) {
       return (R) computing.desired();
     }
-    return (R)
-        desiredStates.computeIfAbsent(
-            dependentResource,
-            ignored -> {
-              final var desired = desiredStateComputer.apply(getPrimaryResource());
-              desiredStatesInProgress.put(
-                  dependentResource, new DesiredStateInProgress(Thread.currentThread(), desired));
-              try {
-                applyDesiredStateAspects(desired, aspectTarget);
-              } finally {
-                desiredStatesInProgress.remove(dependentResource);
-              }
-              return desired;
-            });
+    final var existing = desiredStates.get(dependentResource);
+    if (existing != null) {
+      return (R) existing;
+    }
+    // not computed within ConcurrentHashMap.computeIfAbsent, since an aspect can look up the actual
+    // resource of another dependent, which re-enters this method for a different key
+    final var lock =
+        desiredStateLocks.computeIfAbsent(dependentResource, ignored -> new ReentrantLock());
+    lock.lock();
+    try {
+      final var computedMeanwhile = desiredStates.get(dependentResource);
+      if (computedMeanwhile != null) {
+        return (R) computedMeanwhile;
+      }
+      final var desired = desiredStateComputer.apply(getPrimaryResource());
+      if (desired == null) {
+        return null;
+      }
+      desiredStatesInProgress.put(
+          dependentResource, new DesiredStateInProgress(Thread.currentThread(), desired));
+      try {
+        applyDesiredStateAspects(desired, aspectTarget);
+      } finally {
+        desiredStatesInProgress.remove(dependentResource);
+      }
+      desiredStates.put(dependentResource, desired);
+      return desired;
+    } finally {
+      lock.unlock();
+    }
   }
 
   /**
